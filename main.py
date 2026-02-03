@@ -7,16 +7,16 @@ from flask import Flask, request, send_file, jsonify
 import threading
 
 # ===== AYARLAR =====
-API_TOKEN = "8524225795:AAHk6o1QG1LOxVU4iu0HfGWwvdGKVV-lsDM"  # Telegram bot token
-ADMIN_ID =8538972848               # Admin Telegram ID
-MAX_FILES = 49                     # Admin yükleyebileceği maksimum dosya
+API_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))
+MAX_FILES = 49
 DATA_DIR = "data"
 ALT_MAP_FILE = "alt_map.json"
 
 bot = telebot.TeleBot(API_TOKEN)
 app = Flask(__name__)
 
-# Klasör oluştur (kalıcı disk)
+# Klasör oluştur
 os.makedirs(DATA_DIR, exist_ok=True)
 
 # Alt alan ↔ API ↔ dosya eşleşmesi
@@ -49,7 +49,6 @@ def admin_upload(message):
         bot.reply_to(message, "❌ Sadece TXT dosya kabul edilir.")
         return
 
-    # Dosya adı → alt alan
     alt_name = os.path.splitext(doc.file_name)[0]
 
     if alt_name in alt_map:
@@ -59,23 +58,15 @@ def admin_upload(message):
     api_key = gen_api()
     file_path = os.path.join(DATA_DIR, doc.file_name)
 
-    # Dosyayı indir
     file_info = bot.get_file(doc.file_id)
     downloaded = bot.download_file(file_info.file_path)
     with open(file_path, "wb") as f:
         f.write(downloaded)
 
-    # Alt alan map kaydet
-    alt_map[alt_name] = {
-        "api": api_key,
-        "file": file_path
-    }
+    alt_map[alt_name] = {"api": api_key, "file": file_path}
     save_alt_map()
 
     bot.reply_to(message, f"✅ Dosya kaydedildi: {alt_name}\n🔑 API Key: `{api_key}`", parse_mode="Markdown")
-
-    if len(alt_map) == MAX_FILES:
-        bot.send_message(ADMIN_ID, f"🎉 {MAX_FILES} DOSYA TAMAMLANDI. Sistem hazır.")
 
 # ===== Telegram API Sorgusu =====
 @bot.message_handler(commands=['api'])
@@ -95,7 +86,6 @@ def api_query(message):
 
 # ===== Ortak Fonksiyonlar =====
 def query_file_by_api(api_key, query_text):
-    # API key ile dosya bul
     file_path = None
     for alt, info in alt_map.items():
         if info["api"] == api_key:
@@ -137,7 +127,6 @@ def query_endpoint():
     if results is None:
         return jsonify({"error": "Geçersiz API key"}), 403
 
-    # Çok veri → TXT dosya, az veri → JSON
     if len(results) > 4:
         out_file = f"/tmp/{api_key}_result.txt"
         with open(out_file, "w", encoding="utf-8") as f:
@@ -152,10 +141,7 @@ def start(message):
     bot.reply_to(message, "Merhaba! /api APIKEY sorgu komutunu kullanabilirsiniz veya HTTP GET ile /query?api=APIKEY&q=sorgu kullanabilirsiniz. Dosya yükleyemezsiniz.")
 
 # ===== Bot thread ile başlat =====
-def run_bot():
-    bot.infinity_polling()
-
-threading.Thread(target=run_bot).start()
+threading.Thread(target=lambda: bot.infinity_polling()).start()
 
 # ===== Render uyumlu start =====
 if __name__ == "__main__":
