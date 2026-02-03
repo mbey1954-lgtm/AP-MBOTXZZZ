@@ -1,2 +1,2 @@
-pytelegrambotapi==4.12.0
-Flask==2.3.6
+Flask>=2.2.0
+pytelegrambotapi>=4.12.0
